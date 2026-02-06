@@ -1,0 +1,35 @@
+# Frontend - Node.js
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# Backend - Python
+backend/__pycache__/
+backend/*.py[cod]
+backend/venv/
+backend/.venv/
+backend/.env
+
+# Data & Models (Optional - exclude if you want a clean slate)
+# Uncomment to ignore large weights if using Git
+# *.pt
+# *.pth
+# *.onnx
+
+# Uploaded Data
+backend/data/images/*
+!backend/data/images/.gitkeep
+backend/data/labels/*
+!backend/data/labels/.gitkeep
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo

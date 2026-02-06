@@ -1,0 +1,5 @@
+{
+  "yolo_model": "E:\\SAM2_det_to_seg\\backend\\cabbage_bestvl.pt",
+  "sam2_model": "sam2_hiera_large.pt",
+  "device": "auto"
+}

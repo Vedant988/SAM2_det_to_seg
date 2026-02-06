@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+python-multipart
+ultralytics
+# segment-anything-2 repo installation is complex, usually requires cloning. 
+# We'll assume the user might need to install it manually or we use a wrapper if available.
+# For now, we list base dependencies.
+torch
+torchvision
+opencv-python
+numpy
+Pillow
+python-multipart

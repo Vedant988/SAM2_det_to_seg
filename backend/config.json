@@ -1,5 +1,6 @@
 {
-  "yolo_model": "E:\\SAM2_det_to_seg\\backend\\cabbage_bestvl.pt",
+  "yolo_model": "yolo11n.pt",
   "sam2_model": "sam2_hiera_large.pt",
+  "person_tracker_model": "yolo11m.pt",
   "device": "auto"
 }

@@ -20,27 +20,32 @@ const sortFrames = (images) => {
     })
 }
 
-const getFrameUrl = (filename) => `http://localhost:8000/images_static/${filename}`
 const loadedFrames = new Set()
 
-const preloadFrame = (filename) => {
-    if (!filename || loadedFrames.has(filename)) {
+const getFrameUrl = (filename, projectName) => {
+    const query = projectName ? `?project_name=${encodeURIComponent(projectName)}` : ''
+    return `http://localhost:8000/image_file/${encodeURIComponent(filename)}${query}`
+}
+
+const preloadFrame = (filename, projectName) => {
+    const cacheKey = `${projectName || ''}:${filename || ''}`
+    if (!filename || loadedFrames.has(cacheKey)) {
         return Promise.resolve()
     }
 
     return new Promise((resolve) => {
         const image = new Image()
         image.onload = () => {
-            loadedFrames.add(filename)
+            loadedFrames.add(cacheKey)
             resolve()
         }
         image.onerror = () => resolve()
-        image.src = getFrameUrl(filename)
+        image.src = getFrameUrl(filename, projectName)
     })
 }
 
 export const FrameTimeline = () => {
-    const { images, selectedImage, setSelectedImage } = useStore()
+    const { images, selectedImage, setSelectedImage, projectName } = useStore()
     const [stepSize, setStepSize] = useState(1)
     const [playFps, setPlayFps] = useState(24)
     const [isPlaying, setIsPlaying] = useState(false)
@@ -91,14 +96,14 @@ export const FrameTimeline = () => {
             }
 
             const nextFrame = orderedImages[nextIndex]
-            await preloadFrame(nextFrame)
+            await preloadFrame(nextFrame, projectName)
 
             if (cancelled) return
 
             setSelectedImage(nextFrame)
 
             for (let offset = 1; offset <= 8; offset += 1) {
-                preloadFrame(orderedImages[nextIndex + offset * stepSize])
+                preloadFrame(orderedImages[nextIndex + offset * stepSize], projectName)
             }
 
             playTimerRef.current = setTimeout(playNextFrame, Math.max(16, 1000 / playFps))
@@ -110,7 +115,7 @@ export const FrameTimeline = () => {
             cancelled = true
             clearTimeout(playTimerRef.current)
         }
-    }, [frameCount, isPlaying, orderedImages, playFps, setSelectedImage, stepSize])
+    }, [frameCount, isPlaying, orderedImages, playFps, projectName, setSelectedImage, stepSize])
 
     useEffect(() => {
         if (frameCount <= 1) {

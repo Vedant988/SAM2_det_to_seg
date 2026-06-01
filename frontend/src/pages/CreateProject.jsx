@@ -94,6 +94,7 @@ export const CreateProject = () => {
         if (!videoMetadata) return;
 
         setExtractingFrames(true)
+        const projectQuery = name ? `&project_name=${encodeURIComponent(name)}` : ''
         const expectedExtractCount = Math.ceil(videoMetadata.total_frames / frameStep)
         const extractionStartedAt = Date.now()
         setExtractingProgress({
@@ -135,7 +136,7 @@ export const CreateProject = () => {
         }, 500)
 
         try {
-            const res = await fetch(`http://localhost:8000/video/extract?video_id=${encodeURIComponent(videoMetadata.video_id)}&frame_step=${frameStep}`, {
+            const res = await fetch(`http://localhost:8000/video/extract?video_id=${encodeURIComponent(videoMetadata.video_id)}&frame_step=${frameStep}${projectQuery}`, {
                 method: 'POST'
             })
             
@@ -160,7 +161,7 @@ export const CreateProject = () => {
                     status: 'completed'
                 })
                 // Fetch updated images
-                const data = await fetch('http://localhost:8000/images').then(r => r.json())
+                const data = await fetch(`http://localhost:8000/images${name ? `?project_name=${encodeURIComponent(name)}` : ''}`).then(r => r.json())
                 setImages(data)
                 // Navigate to workspace
                 navigate('/workspace')
@@ -237,13 +238,14 @@ export const CreateProject = () => {
         })
 
         try {
-            const res = await fetch('http://localhost:8000/upload', {
+            const query = name ? `?project_name=${encodeURIComponent(name)}` : ''
+            const res = await fetch(`http://localhost:8000/upload${query}`, {
                 method: 'POST',
                 body: formData
             })
             if (res.ok) {
                 // Fetch updated images
-                const data = await fetch('http://localhost:8000/images').then(r => r.json())
+                const data = await fetch(`http://localhost:8000/images${query}`).then(r => r.json())
                 setImages(data)
                 // Navigate to workspace
                 navigate('/workspace')

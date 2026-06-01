@@ -42,10 +42,12 @@ async def startup_event():
     images_dir = os.path.join(data_dir, "images")
     labels_dir = os.path.join(data_dir, "labels")
     videos_dir = os.path.join(data_dir, "videos")
+    projects_dir = os.path.join(data_dir, "projects")
     
     os.makedirs(images_dir, exist_ok=True)
     os.makedirs(labels_dir, exist_ok=True)
     os.makedirs(videos_dir, exist_ok=True)
+    os.makedirs(projects_dir, exist_ok=True)
 
 # Mount static files using absolute path
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

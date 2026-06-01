@@ -11,18 +11,20 @@ frontend/yarn-error.log*
 
 # Backend - Python
 backend/__pycache__/
+backend/**/__pycache__/
 backend/*.py[cod]
+*.py[cod]
 backend/venv/
 backend/.venv/
 backend/.env
 
 # Data & Models (Optional - exclude if you want a clean slate)
-# Uncomment to ignore large weights if using Git
-# *.pt
-# *.pth
-# *.onnx
+*.pt
+*.pth
+*.onnx
 
 # Uploaded Data
+backend/data/
 backend/data/images/*
 !backend/data/images/.gitkeep
 backend/data/labels/*

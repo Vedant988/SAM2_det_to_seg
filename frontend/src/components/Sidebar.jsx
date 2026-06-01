@@ -3,7 +3,7 @@ import { useStore } from '../store'
 import { Image as ImageIcon, Plus, CheckCircle2, Trash2, X } from 'lucide-react'
 
 export const Sidebar = ({ onClose }) => {
-    const { images, setImages, selectedImage, setSelectedImage, allAnnotations } = useStore()
+    const { images, setImages, selectedImage, setSelectedImage, allAnnotations, projectName } = useStore()
     const fileInputRef = useRef(null)
 
     const handleUpload = async (e) => {
@@ -16,12 +16,13 @@ export const Sidebar = ({ onClose }) => {
         })
 
         try {
-            const res = await fetch('http://localhost:8000/upload', {
+            const query = projectName ? `?project_name=${encodeURIComponent(projectName)}` : ''
+            const res = await fetch(`http://localhost:8000/upload${query}`, {
                 method: 'POST',
                 body: formData
             })
             if (res.ok) {
-                const data = await fetch('http://localhost:8000/images').then(r => r.json())
+                const data = await fetch(`http://localhost:8000/images${query}`).then(r => r.json())
                 setImages(data)
             }
         } catch (err) {
@@ -37,7 +38,8 @@ export const Sidebar = ({ onClose }) => {
         if (!confirm(`Are you sure you want to delete ${filename}?`)) return
 
         try {
-            const res = await fetch(`http://localhost:8000/images/${filename}`, {
+            const query = projectName ? `?project_name=${encodeURIComponent(projectName)}` : ''
+            const res = await fetch(`http://localhost:8000/images/${encodeURIComponent(filename)}${query}`, {
                 method: 'DELETE'
             })
             if (res.ok) {
@@ -95,7 +97,7 @@ export const Sidebar = ({ onClose }) => {
                                 className={`group relative aspect-square rounded-xl cursor-pointer overflow-hidden border-2 transition-all duration-200 ${selectedImage === img ? 'border-cyan-500 shadow-cyan-500/30 shadow-lg scale-[1.02] ring-2 ring-cyan-500/20' : 'border-transparent hover:border-slate-600 hover:scale-[1.02]'}`}
                             >
                                 <img
-                                    src={`http://localhost:8000/images_static/${img}`}
+                                    src={`http://localhost:8000/image_file/${encodeURIComponent(img)}${projectName ? `?project_name=${encodeURIComponent(projectName)}` : ''}`}
                                     alt={img}
                                     className="w-full h-full object-cover"
                                     loading="lazy"

@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Stage, Layer, Image as KonvaImage, Rect, Transformer, Text, Label, Tag } from 'react-konva'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
+import { Stage, Layer, Image as KonvaImage, Rect, Transformer, Text, Label, Tag, Line } from 'react-konva'
 import useImage from 'use-image'
 import { useStore } from '../store'
-import { MousePointer2, Hand, RefreshCw, Trash2 } from 'lucide-react'
+import { MousePointer2, Hand, RefreshCw, Trash2, Pencil } from 'lucide-react'
 import { v4 as uuidv4 } from 'uuid'
 
 const URLImage = ({ src, onImageLoad }) => {
@@ -21,7 +22,7 @@ const URLImage = ({ src, onImageLoad }) => {
     return renderedImage ? <KonvaImage image={renderedImage} listening={false} /> : null
 }
 
-const Rectangle = ({ shapeProps, isSelected, onSelect, onChange, stageScale }) => {
+const Rectangle = ({ shapeProps, isSelected, onSelect, onChange, onDblClick, stageScale }) => {
     const shapeRef = useRef();
 
     // Calculate stroke width based on stage scale to maintain consistent visual thickness
@@ -33,6 +34,8 @@ const Rectangle = ({ shapeProps, isSelected, onSelect, onChange, stageScale }) =
             <Rect
                 onClick={onSelect}
                 onTap={onSelect}
+                onDblClick={onDblClick}
+                onDblTap={onDblClick}
                 ref={shapeRef}
                 {...shapeProps}
                 draggable
@@ -92,25 +95,183 @@ const Rectangle = ({ shapeProps, isSelected, onSelect, onChange, stageScale }) =
     );
 };
 
+const normalizeLabel = (label) => {
+    const trimmed = String(label || '').trim()
+    return trimmed && trimmed !== 'New Object' ? trimmed : 'Object'
+}
+
+const getExplicitLabel = (label) => {
+    const trimmed = String(label || '').trim()
+    return trimmed && trimmed !== 'New Object' ? trimmed : null
+}
+
+const buildLabelClassMap = (allAnnotations) => {
+    const labels = new Set()
+    const labelToId = new Map()
+    const usedIds = new Set()
+
+    Object.values(allAnnotations || {}).forEach((list) => {
+        if (!Array.isArray(list)) return
+        list.forEach((annotation) => {
+            const label = getExplicitLabel(annotation.label)
+            if (!label) return
+            labels.add(label)
+
+            const classId = Number(annotation.class_id)
+            if (
+                Number.isInteger(classId) &&
+                classId >= 0 &&
+                !labelToId.has(label) &&
+                !usedIds.has(classId)
+            ) {
+                labelToId.set(label, classId)
+                usedIds.add(classId)
+            }
+        })
+    })
+
+    Array.from(labels).sort((a, b) => a.localeCompare(b)).forEach((label) => {
+        if (labelToId.has(label)) return
+        let nextId = 0
+        while (usedIds.has(nextId)) nextId += 1
+        labelToId.set(label, nextId)
+        usedIds.add(nextId)
+    })
+
+    return labelToId
+}
+
+const LabelPopup = ({ annotation, stagePosition, stageScale, onClose, containerRef }) => {
+    const { updateAnnotation, allAnnotations } = useStore()
+    const [inputValue, setInputValue] = useState(annotation.label === 'New Object' ? '' : annotation.label || '')
+    const inputRef = useRef(null)
+
+    const recentLabels = useMemo(() => {
+        const labels = new Set()
+        Object.values(allAnnotations || {}).forEach((list) => {
+            if (!Array.isArray(list)) return
+            list.forEach((item) => {
+                const label = normalizeLabel(item.label)
+                if (label !== 'Object') labels.add(label)
+            })
+        })
+        return Array.from(labels).sort((a, b) => a.localeCompare(b))
+    }, [allAnnotations])
+
+    const commitLabel = (rawLabel) => {
+        const label = normalizeLabel(rawLabel || recentLabels[0])
+        const labelClassMap = buildLabelClassMap({
+            ...allAnnotations,
+            __editing__: [{ ...annotation, label }]
+        })
+
+        updateAnnotation(annotation.id, {
+            label,
+            class_id: labelClassMap.get(label) ?? 0,
+            confidence: annotation.confidence ?? 1.0
+        })
+        onClose()
+    }
+
+    useEffect(() => {
+        inputRef.current?.focus()
+        inputRef.current?.select()
+    }, [])
+
+    const containerRect = containerRef.current?.getBoundingClientRect() || { left: 0, top: 0 }
+    const left = containerRect.left + (annotation.x * stageScale + stagePosition.x)
+    const top = containerRect.top + ((annotation.y + annotation.height) * stageScale + stagePosition.y + 10)
+
+    return createPortal(
+        <div
+            className="fixed z-[100] w-64 rounded-xl border border-slate-700/70 bg-slate-900/95 p-3 shadow-2xl backdrop-blur-xl"
+            style={{ left, top, transform: 'translateX(-50%)' }}
+        >
+            <form
+                className="flex flex-col gap-2"
+                onSubmit={(event) => {
+                    event.preventDefault()
+                    commitLabel(inputValue)
+                }}
+            >
+                <div className="flex items-center justify-between text-[10px] font-bold uppercase text-slate-500">
+                    <span>Name object</span>
+                    <button type="button" onClick={onClose} className="text-base leading-none text-slate-400 hover:text-white">
+                        &times;
+                    </button>
+                </div>
+
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={inputValue}
+                    onChange={(event) => setInputValue(event.target.value)}
+                    placeholder="customer, staff..."
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-medium text-white outline-none placeholder:text-slate-600 focus:border-cyan-500"
+                />
+
+                {recentLabels.length > 0 && (
+                    <div className="flex max-h-28 flex-wrap gap-1 overflow-y-auto">
+                        {recentLabels.map((label, index) => (
+                            <button
+                                key={label}
+                                type="button"
+                                onClick={() => commitLabel(label)}
+                                className={`rounded-md border px-2 py-1 text-xs font-bold transition ${index === 0
+                                    ? 'border-cyan-500/50 bg-cyan-500/15 text-cyan-200'
+                                    : 'border-slate-700 bg-slate-800 text-slate-300 hover:border-cyan-500/50 hover:text-cyan-200'
+                                    }`}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                <button
+                    type="submit"
+                    className="rounded-lg bg-cyan-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-cyan-500"
+                >
+                    Save Label
+                </button>
+            </form>
+        </div>,
+        document.body
+    )
+}
+
 export const Canvas = () => {
-    const { selectedImage, annotations, setAnnotations, updateAnnotation, removeAnnotation } = useStore()
+    const {
+        selectedImage,
+        annotations,
+        setAnnotations,
+        updateAnnotation,
+        removeAnnotation,
+        projectName,
+        annotationTool,
+        setAnnotationTool
+    } = useStore()
     const [selectedId, selectShape] = useState(null)
     const [stageSize, setStageSize] = useState({ width: window.innerWidth, height: window.innerHeight })
+    const [imageSize, setImageSize] = useState({ width: 0, height: 0 })
     const [scale, setScale] = useState(1)
     const [position, setPosition] = useState({ x: 0, y: 0 })
 
-    // Tools: 'pan' | 'draw'
-    const [tool, setTool] = useState('pan')
+    const tool = annotationTool
 
     // Interaction States
     const [isPanning, setIsPanning] = useState(false)
     const [isDrawing, setIsDrawing] = useState(false)
     const [newAnnotation, setNewAnnotation] = useState(null)
+    const [cursorGuide, setCursorGuide] = useState(null)
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+    const [editingAnnotationId, setEditingAnnotationId] = useState(null)
 
     const stageRef = useRef(null)
     const transformerRef = useRef(null)
     const lastLoadedImageRef = useRef(null)
+    const guideFrameRef = useRef(null)
+    const canvasContainerRef = useRef(null)
 
     useEffect(() => {
         const handleResize = () => {
@@ -124,14 +285,26 @@ export const Canvas = () => {
     useEffect(() => {
         const handleKeyDown = (e) => {
             if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+                if (editingAnnotationId) return;
                 removeAnnotation(selectedId);
                 selectShape(null); // Deselect after deleting
+            }
+            if (e.key === 'Escape' && editingAnnotationId) {
+                setEditingAnnotationId(null);
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [selectedId, removeAnnotation]);
+    }, [selectedId, removeAnnotation, editingAnnotationId]);
+
+    useEffect(() => {
+        return () => {
+            if (guideFrameRef.current) {
+                cancelAnimationFrame(guideFrameRef.current);
+            }
+        }
+    }, []);
 
     // Update Transformer nodes when selection changes
     useEffect(() => {
@@ -160,15 +333,18 @@ export const Canvas = () => {
     // Reset lastLoadedImageRef when selectedImage changes
     useEffect(() => {
         lastLoadedImageRef.current = null;
-        setTool('pan'); // Reset tool to pan on image change safely
+        setCursorGuide(null);
+        setAnnotationTool('pan'); // Reset tool to pan on image change safely
         selectShape(null); // Clear selection on image change
-    }, [selectedImage])
+        setEditingAnnotationId(null);
+    }, [selectedImage, setAnnotationTool])
 
     const handleImageLoad = useCallback((imgWidth, imgHeight) => {
         if (lastLoadedImageRef.current === selectedImage) return;
         lastLoadedImageRef.current = selectedImage;
 
         if (imgWidth <= 0 || imgHeight <= 0) return;
+        setImageSize({ width: imgWidth, height: imgHeight });
 
         const padding = 50;
         const availableWidth = stageSize.width - padding * 2;
@@ -192,12 +368,22 @@ export const Canvas = () => {
         const clickedOnEmpty = e.target === e.target.getStage() || e.target.getLayer() === e.target;
         if (clickedOnEmpty) {
             selectShape(null);
+            setEditingAnnotationId(null);
         }
     };
+
+    const clampGuidePosition = (pos) => ({
+        x: Math.max(0, Math.min(imageSize.width || pos.x, pos.x)),
+        y: Math.max(0, Math.min(imageSize.height || pos.y, pos.y))
+    });
 
     const handleMouseDown = (e) => {
         const stage = e.target.getStage();
         const pos = stage.getPointerPosition();
+
+        if (editingAnnotationId) {
+            setEditingAnnotationId(null);
+        }
 
         // Calculate relative position to the image (removing pan/zoom offset)
         const relativePos = {
@@ -223,6 +409,7 @@ export const Canvas = () => {
             if (e.target === stage) {
                 selectShape(null);
                 setIsDrawing(true);
+                setCursorGuide(clampGuidePosition(relativePos));
                 const id = uuidv4();
                 const newRect = {
                     id: id,
@@ -240,21 +427,30 @@ export const Canvas = () => {
     };
 
     const handleMouseMove = (e) => {
+        const stage = stageRef.current;
+        const pointer = stage?.getPointerPosition();
+        if (!pointer) return;
+
+        const relativePos = pointer ? {
+            x: (pointer.x - position.x) / scale,
+            y: (pointer.y - position.y) / scale
+        } : null;
+
+        if (tool === 'draw' && relativePos) {
+            if (guideFrameRef.current) {
+                cancelAnimationFrame(guideFrameRef.current);
+            }
+            guideFrameRef.current = requestAnimationFrame(() => {
+                setCursorGuide(clampGuidePosition(relativePos));
+            });
+        }
+
         if (tool === 'pan' && isPanning) {
-            const stage = stageRef.current;
-            const pointer = stage.getPointerPosition();
             setPosition({
                 x: pointer.x - dragStart.x,
                 y: pointer.y - dragStart.y
             });
         } else if (tool === 'draw' && isDrawing && newAnnotation) {
-            const stage = stageRef.current;
-            const pointer = stage.getPointerPosition();
-            const relativePos = {
-                x: (pointer.x - position.x) / scale,
-                y: (pointer.y - position.y) / scale
-            };
-
             const newWidth = relativePos.x - newAnnotation.x;
             const newHeight = relativePos.y - newAnnotation.y;
 
@@ -284,6 +480,7 @@ export const Canvas = () => {
                 if (finalRect.width > 5 && finalRect.height > 5) {
                     setAnnotations([...annotations, finalRect]);
                     selectShape(finalRect.id); // Select the new one
+                    setEditingAnnotationId(finalRect.id);
                 }
 
                 setNewAnnotation(null);
@@ -316,16 +513,26 @@ export const Canvas = () => {
         setPosition(newPos);
     }
 
+    const handleMouseLeave = () => {
+        if (guideFrameRef.current) {
+            cancelAnimationFrame(guideFrameRef.current);
+            guideFrameRef.current = null;
+        }
+        handleMouseUp();
+        setCursorGuide(null);
+    }
+
     // Delete Logic
     const handleDeleteSelected = () => {
         if (selectedId) {
             removeAnnotation(selectedId);
             selectShape(null);
+            setEditingAnnotationId(null);
         }
     }
 
     // Reset View Logic
-    const imageUrl = selectedImage ? `http://localhost:8000/images_static/${selectedImage}` : '';
+    const imageUrl = selectedImage ? `http://localhost:8000/image_file/${encodeURIComponent(selectedImage)}${projectName ? `?project_name=${encodeURIComponent(projectName)}` : ''}` : '';
     const handleResetView = () => {
         lastLoadedImageRef.current = null;
         const image = new Image();
@@ -334,6 +541,14 @@ export const Canvas = () => {
             handleImageLoad(image.width, image.height);
         }
     }
+
+    const handleEditSelected = () => {
+        if (selectedId) {
+            setEditingAnnotationId(selectedId)
+        }
+    }
+
+    const editingAnnotation = annotations.find((annotation) => annotation.id === editingAnnotationId)
 
     if (!selectedImage) {
         return (
@@ -346,7 +561,17 @@ export const Canvas = () => {
     }
 
     return (
-        <div className={`flex-1 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 overflow-hidden relative ${tool === 'pan' && isPanning ? 'cursor-grabbing' : tool === 'pan' ? 'cursor-grab' : 'cursor-crosshair'}`}>
+        <div ref={canvasContainerRef} className={`flex-1 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 overflow-hidden relative ${tool === 'pan' && isPanning ? 'cursor-grabbing' : tool === 'pan' ? 'cursor-grab' : 'cursor-crosshair'}`}>
+            {editingAnnotation && (
+                <LabelPopup
+                    annotation={editingAnnotation}
+                    stagePosition={position}
+                    stageScale={scale}
+                    onClose={() => setEditingAnnotationId(null)}
+                    containerRef={canvasContainerRef}
+                />
+            )}
+
             {/* Annotation count & Tool Info */}
             <div className="absolute top-6 right-6 z-20 flex flex-col gap-2 items-end">
                 {annotations.length > 0 && (
@@ -362,14 +587,14 @@ export const Canvas = () => {
                 {/* Tool Toggle */}
                 <div className="flex items-center bg-slate-800 rounded-lg p-1 border border-slate-700">
                     <button
-                        onClick={() => setTool('pan')}
+                        onClick={() => setAnnotationTool('pan')}
                         className={`p-2 rounded-md transition-all ${tool === 'pan' ? 'bg-slate-700 text-cyan-400 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
                         title="Pan Tool"
                     >
                         <Hand size={18} />
                     </button>
                     <button
-                        onClick={() => setTool('draw')}
+                        onClick={() => setAnnotationTool('draw')}
                         className={`p-2 rounded-md transition-all ${tool === 'draw' ? 'bg-slate-700 text-cyan-400 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
                         title="Draw Tool"
                     >
@@ -388,6 +613,13 @@ export const Canvas = () => {
                 {/* Delete Button (Visible only when selected) */}
                 {selectedId && (
                     <>
+                        <button
+                            onClick={handleEditSelected}
+                            className="p-2 text-cyan-400 hover:text-white bg-cyan-950/30 hover:bg-cyan-600 rounded-lg transition-colors border border-cyan-900/50 hover:border-cyan-500"
+                            title="Edit Label"
+                        >
+                            <Pencil size={18} />
+                        </button>
                         <button
                             onClick={handleDeleteSelected}
                             className="p-2 text-red-400 hover:text-white bg-red-950/30 hover:bg-red-600 rounded-lg transition-colors border border-red-900/50 hover:border-red-500"
@@ -415,7 +647,7 @@ export const Canvas = () => {
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
+                onMouseLeave={handleMouseLeave}
                 onTouchStart={checkDeselect}
                 onWheel={handleWheel}
                 scaleX={scale}
@@ -426,6 +658,43 @@ export const Canvas = () => {
                 <Layer>
                     <URLImage src={imageUrl} onImageLoad={handleImageLoad} />
 
+                    {tool === 'draw' && cursorGuide && imageSize.width > 0 && imageSize.height > 0 && (
+                        <>
+                            <Line
+                                points={[0, cursorGuide.y, imageSize.width, cursorGuide.y]}
+                                stroke="#c30010"
+                                strokeWidth={0.6 / scale}
+                                dash={[10 / scale, 7 / scale]}
+                                listening={false}
+                            />
+                            <Line
+                                points={[cursorGuide.x, 0, cursorGuide.x, imageSize.height]}
+                                stroke="#c30010"
+                                strokeWidth={0.6 / scale}
+                                dash={[10 / scale, 7 / scale]}
+                                listening={false}
+                            />
+                            <Line
+                                points={[
+                                    cursorGuide.x - (10 / scale), cursorGuide.y,
+                                    cursorGuide.x + (10 / scale), cursorGuide.y
+                                ]}
+                                stroke="#c30010"
+                                strokeWidth={0.8 / scale}
+                                listening={false}
+                            />
+                            <Line
+                                points={[
+                                    cursorGuide.x, cursorGuide.y - (10 / scale),
+                                    cursorGuide.x, cursorGuide.y + (10 / scale)
+                                ]}
+                                stroke="#c30010"
+                                strokeWidth={0.8 / scale}
+                                listening={false}
+                            />
+                        </>
+                    )}
+
                     {/* Existing Annotations */}
                     {annotations.map((ann) => {
                         return (
@@ -435,6 +704,10 @@ export const Canvas = () => {
                                 isSelected={ann.id === selectedId}
                                 onSelect={() => {
                                     if (tool === 'pan' || tool === 'draw') selectShape(ann.id)
+                                }}
+                                onDblClick={() => {
+                                    selectShape(ann.id)
+                                    setEditingAnnotationId(ann.id)
                                 }}
                                 onChange={(newAttrs) => {
                                     updateAnnotation(ann.id, newAttrs);

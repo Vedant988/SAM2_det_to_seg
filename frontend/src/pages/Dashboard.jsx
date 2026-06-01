@@ -46,6 +46,12 @@ export const Dashboard = () => {
                         <p className="text-slate-400 mt-2">AI-Assisted Segmentation & Detection Pipeline</p>
                     </div>
                     <div className="flex gap-4">
+                        <Link to="/projects">
+                            <Button variant="outline" className="gap-2">
+                                <FolderOpen className="h-5 w-5" />
+                                Projects
+                            </Button>
+                        </Link>
                         <Button variant="outline" size="icon">
                             <Github className="h-5 w-5" />
                         </Button>
@@ -118,7 +124,9 @@ export const Dashboard = () => {
                             )}
                         </CardContent>
                         <CardFooter>
-                            <Button variant="ghost" size="sm" className="w-full text-slate-500 hover:text-slate-300">View All History</Button>
+                            <Link to="/projects" className="w-full">
+                                <Button variant="ghost" size="sm" className="w-full text-slate-500 hover:text-slate-300">View All History</Button>
+                            </Link>
                         </CardFooter>
                     </Card>
                 </div>

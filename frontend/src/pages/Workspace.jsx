@@ -4,20 +4,24 @@ import { Canvas } from '../components/WorkspaceCanvas'
 import { FrameTimeline } from '../components/FrameTimeline'
 import { Toolbar } from '../components/Toolbar'
 import { useStore } from '../store'
-import { ArrowLeft, Images } from 'lucide-react'
+import { ArrowLeft, Download, Images, Rocket } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 export const Workspace = () => {
-    const { setImages, projectName } = useStore()
+    const { setImages, setAllAnnotations, projectName } = useStore()
     const [showGallery, setShowGallery] = useState(false)
     const API_URL = "http://localhost:8000"
 
     useEffect(() => {
-        fetch(`${API_URL}/images`)
+        const query = projectName ? `?project_name=${encodeURIComponent(projectName)}` : ''
+        fetch(`${API_URL}/project_data${query}`)
             .then(res => res.json())
-            .then(data => setImages(data))
+            .then(data => {
+                setImages(data.images || [])
+                setAllAnnotations(data.annotations || {})
+            })
             .catch(err => console.error("Failed to load images", err))
-    }, [])
+    }, [projectName])
 
     return (
         <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans selection:bg-cyan-500/30">
@@ -47,6 +51,14 @@ export const Workspace = () => {
                             <Images size={18} />
                             <span>Gallery</span>
                         </button>
+                        <Link to="/export" className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm font-bold text-slate-300 backdrop-blur-md transition-colors hover:bg-slate-900 hover:text-cyan-300">
+                            <Download size={18} />
+                            <span>Export</span>
+                        </Link>
+                        <Link to="/train" className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm font-bold text-slate-300 backdrop-blur-md transition-colors hover:bg-slate-900 hover:text-blue-300">
+                            <Rocket size={18} />
+                            <span>Train</span>
+                        </Link>
                     </div>
                     <div className="pointer-events-auto px-4 py-1 bg-slate-900/50 rounded-full backdrop-blur-md border border-slate-800">
                         <span className="text-xs font-mono text-slate-400">Project: </span>

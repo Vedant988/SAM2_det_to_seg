@@ -7,9 +7,11 @@ from sam2.sam2_image_predictor import SAM2ImagePredictor
 
 # Global instances
 yolo_model = None
+person_tracker_model = None
 sam2_predictor = None
 DEVICE = "cpu"
 current_yolo_model_path = None
+current_person_tracker_model_path = None
 
 # Config file path
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -57,6 +59,57 @@ def load_yolo_model(model_path: str):
     except Exception as e:
         print(f"❌ Error loading YOLO model '{model_path}': {e}")
         return False
+
+def get_model_class_id(model, class_name: str):
+    names = getattr(model, "names", {}) or {}
+    if isinstance(names, list):
+        names = {idx: name for idx, name in enumerate(names)}
+
+    for class_id, name in names.items():
+        if str(name).lower() == class_name.lower():
+            return int(class_id)
+
+    return None
+
+def model_has_class(model, class_name: str):
+    return get_model_class_id(model, class_name) is not None
+
+def get_person_tracker_yolo():
+    """Use a lightweight COCO YOLO for staff/customer tracking without replacing the active project model."""
+    global person_tracker_model, current_person_tracker_model_path
+
+    if yolo_model is not None and model_has_class(yolo_model, "person"):
+        return yolo_model
+
+    if person_tracker_model is not None:
+        return person_tracker_model
+
+    config = load_config()
+    candidates = []
+    configured_model = os.environ.get("PERSON_TRACKER_MODEL") or config.get("person_tracker_model")
+    if configured_model:
+        candidates.append(configured_model)
+
+    candidates.extend(["yolo11n.pt", "yolov8n.pt"])
+
+    for model_path in candidates:
+        try:
+            print(f"Loading person tracker YOLO: {model_path} on {DEVICE}...")
+            model = YOLO(model_path)
+            model.to(DEVICE)
+            if not model_has_class(model, "person"):
+                print(f"⚠️ Person tracker model has no 'person' class: {model_path}")
+                continue
+
+            person_tracker_model = model
+            current_person_tracker_model_path = model_path
+            print(f"✅ Person tracker ready: {model_path}")
+            return person_tracker_model
+        except Exception as e:
+            print(f"⚠️ Could not load person tracker model '{model_path}': {e}")
+
+    print("⚠️ No person tracker model available. Tracking will use optical flow/template fallback.")
+    return None
 
 def load_sam2_model(model_name: str):
     """
@@ -214,8 +267,10 @@ def get_current_model_info():
     """Get information about currently loaded models."""
     return {
         "yolo_model": current_yolo_model_path,
+        "person_tracker_model": current_person_tracker_model_path,
         "device": DEVICE,
         "yolo_loaded": yolo_model is not None,
+        "person_tracker_loaded": person_tracker_model is not None,
         "sam2_loaded": sam2_predictor is not None
     }
 

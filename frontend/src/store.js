@@ -19,6 +19,9 @@ export const useStore = create(
             deleteRecentProject: (projectId) => set((state) => ({
                 recentProjects: state.recentProjects.filter(project => project.id !== projectId)
             })),
+            removeRecentProject: (projectName) => set((state) => ({
+                recentProjects: state.recentProjects.filter(project => project.name !== projectName)
+            })),
 
             // Image & Annotation State
             images: [],
@@ -29,30 +32,53 @@ export const useStore = create(
             // Processing State
             isProcessing: false,
             processingProgress: { current: 0, total: 0, message: '' },
+            annotationTool: 'pan',
 
             // Actions
             setImages: (images) => set({ images }),
             setSelectedImage: (image) => set((state) => ({
                 selectedImage: image,
-                annotations: state.allAnnotations[image] || []
+                annotations: Array.isArray(state.allAnnotations[image]) ? state.allAnnotations[image] : []
             })),
             setAnnotations: (annotations) => set((state) => {
+                const safeAnnotations = Array.isArray(annotations) ? annotations : []
                 const newAllAnnotations = { ...state.allAnnotations }
                 if (state.selectedImage) {
-                    newAllAnnotations[state.selectedImage] = annotations
+                    newAllAnnotations[state.selectedImage] = safeAnnotations
                 }
-                return { annotations, allAnnotations: newAllAnnotations }
+                return { annotations: safeAnnotations, allAnnotations: newAllAnnotations }
             }),
             setAllAnnotations: (allAnnotations) => set({ allAnnotations }),
-            addAnnotation: (annotation) => set((state) => ({ annotations: [...state.annotations, annotation] })),
-            updateAnnotation: (id, newProps) => set((state) => ({
-                annotations: state.annotations.map(ann => ann.id === id ? { ...ann, ...newProps } : ann)
-            })),
-            removeAnnotation: (id) => set((state) => ({
-                annotations: state.annotations.filter(ann => ann.id !== id)
-            })),
+            addAnnotation: (annotation) => set((state) => {
+                const currentAnnotations = Array.isArray(state.annotations) ? state.annotations : []
+                const annotations = [...currentAnnotations, annotation]
+                const allAnnotations = { ...state.allAnnotations }
+                if (state.selectedImage) {
+                    allAnnotations[state.selectedImage] = annotations
+                }
+                return { annotations, allAnnotations }
+            }),
+            updateAnnotation: (id, newProps) => set((state) => {
+                const currentAnnotations = Array.isArray(state.annotations) ? state.annotations : []
+                const annotations = currentAnnotations.map(ann => ann.id === id ? { ...ann, ...newProps } : ann)
+                const allAnnotations = { ...state.allAnnotations }
+                if (state.selectedImage) {
+                    allAnnotations[state.selectedImage] = annotations
+                }
+                return { annotations, allAnnotations }
+            }),
+            removeAnnotation: (id) => set((state) => {
+                const currentAnnotations = Array.isArray(state.annotations) ? state.annotations : []
+                const annotations = currentAnnotations.filter(ann => ann.id !== id)
+                const allAnnotations = { ...state.allAnnotations }
+                if (state.selectedImage) {
+                    allAnnotations[state.selectedImage] = annotations
+                }
+                return { annotations, allAnnotations }
+            }),
             setProcessing: (status) => set({ isProcessing: status }),
             setProcessingProgress: (progress) => set({ processingProgress: progress }),
+            setAnnotationTool: (tool) => set({ annotationTool: tool }),
 
             // Reset Project
             resetProject: () => set({
@@ -62,7 +88,8 @@ export const useStore = create(
                 annotations: [],
                 allAnnotations: {},
                 isProcessing: false,
-                processingProgress: { current: 0, total: 0, message: '' }
+                processingProgress: { current: 0, total: 0, message: '' },
+                annotationTool: 'pan'
             }),
 
             deleteImage: (filename) => set((state) => {
@@ -79,7 +106,7 @@ export const useStore = create(
         }),
         {
             name: 'yolo-sam2-storage', // unique name
-            partialize: (state) => ({ recentProjects: state.recentProjects }), // only persist recentProjects
+            partialize: (state) => ({ recentProjects: state.recentProjects, projectName: state.projectName }),
         }
     )
 )

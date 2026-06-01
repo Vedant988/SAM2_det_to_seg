@@ -408,10 +408,10 @@ def track_annotations(payload: dict):
     task_id = payload.get("task_id") or str(uuid.uuid4())
     started_at = time.time()
     try:
-        max_motion_pixels = float(payload.get("max_motion_pixels") or 28)
+        max_motion_pixels = float(payload.get("max_motion_pixels") or 22)
     except (TypeError, ValueError):
-        max_motion_pixels = 28
-    max_motion_pixels = max(2.0, min(max_motion_pixels, 80.0))
+        max_motion_pixels = 22
+    max_motion_pixels = max(2.0, min(max_motion_pixels, 60.0))
 
     if not start_filename:
         raise HTTPException(status_code=400, detail="start_filename is required")
@@ -509,7 +509,7 @@ def track_annotations(payload: dict):
             state["h"]
         )
 
-    def constrain_box_motion(state, proposed_box, frame_width, frame_height, allow_reacquire=False):
+    def constrain_box_motion(state, proposed_box, frame_width, frame_height, allow_reacquire=False, align_to_detection=False):
         px, py, pw, ph = proposed_box
         current_cx = state["x"] + state["w"] / 2
         current_cy = state["y"] + state["h"] / 2
@@ -520,19 +520,24 @@ def track_annotations(payload: dict):
         distance = (dx ** 2 + dy ** 2) ** 0.5
         motion_limit = max_motion_pixels
         if allow_reacquire:
-            motion_limit = min(max_motion_pixels * 4, max(max_motion_pixels, max(state["w"], state["h"]) * 1.25))
+            motion_limit = min(max_motion_pixels * 2, max_motion_pixels * (1.25 + state.get("missed", 0) * 0.35))
         elif state.get("missed", 0) > 0:
-            motion_limit = min(max_motion_pixels * 3, max_motion_pixels * (1 + state.get("missed", 0)))
+            motion_limit = min(max_motion_pixels * 1.75, max_motion_pixels * (1 + state.get("missed", 0) * 0.25))
 
         if distance > motion_limit:
             ratio = motion_limit / distance
             proposed_cx = current_cx + dx * ratio
             proposed_cy = current_cy + dy * ratio
 
-        max_width_delta = max(2.0, state["w"] * 0.06)
-        max_height_delta = max(2.0, state["h"] * 0.06)
-        pw = state["w"] + max(-max_width_delta, min(max_width_delta, pw - state["w"]))
-        ph = state["h"] + max(-max_height_delta, min(max_height_delta, ph - state["h"]))
+        if align_to_detection:
+            size_blend = 0.82
+            pw = (state["w"] * (1 - size_blend)) + (pw * size_blend)
+            ph = (state["h"] * (1 - size_blend)) + (ph * size_blend)
+        else:
+            max_width_delta = max(2.0, state["w"] * 0.025)
+            max_height_delta = max(2.0, state["h"] * 0.025)
+            pw = state["w"] + max(-max_width_delta, min(max_width_delta, pw - state["w"]))
+            ph = state["h"] + max(-max_height_delta, min(max_height_delta, ph - state["h"]))
 
         return clamp_box(
             {
@@ -674,30 +679,10 @@ def track_annotations(payload: dict):
         predicted_box = predict_box(state)
         missed = state.get("missed", 0)
         search_radius = min(
-            260.0,
-            max(max_motion_pixels * 2.5, max(state["w"], state["h"]) * 0.75)
-            + (missed * max_motion_pixels * 1.5)
+            140.0,
+            max(max_motion_pixels * 1.75, max(state["w"], state["h"]) * 0.28)
+            + (missed * max_motion_pixels * 0.75)
         )
-
-        if state.get("track_id") is not None:
-            for index, detection in enumerate(detections):
-                if index in used_indexes:
-                    continue
-                if detection.get("track_id") == state["track_id"]:
-                    if compatible_ids and detection["class_id"] not in compatible_ids:
-                        continue
-                    appearance_score = histogram_similarity(
-                        state.get("appearance_hist"),
-                        crop_histogram(current_frame_bgr, detection["bbox"])
-                    )
-                    previous_centroid_distance = center_distance(previous_box, detection["bbox"])
-                    predicted_centroid_distance = center_distance(predicted_box, detection["bbox"])
-                    if min(previous_centroid_distance, predicted_centroid_distance) > search_radius and appearance_score < 0.45:
-                        continue
-                    detection["appearance_score"] = appearance_score
-                    detection["centroid_distance"] = previous_centroid_distance
-                    detection["allow_reacquire"] = appearance_score >= 0.55 or missed > 0
-                    return index, detection
 
         best_index = None
         best_detection = None
@@ -716,15 +701,22 @@ def track_annotations(payload: dict):
             )
             previous_centroid_distance = center_distance(previous_box, detection["bbox"])
             nearest_centroid_distance = min(distance, previous_centroid_distance)
-            if nearest_centroid_distance > search_radius and appearance_score < 0.55:
+            can_reacquire_far = (
+                missed >= 2
+                and appearance_score >= 0.72
+                and nearest_centroid_distance <= search_radius * 1.7
+            )
+            if nearest_centroid_distance > search_radius and not can_reacquire_far:
                 continue
 
             centroid_score = max(0.0, 1.0 - (nearest_centroid_distance / max(search_radius, 1.0)))
+            track_id_bonus = 0.2 if state.get("track_id") is not None and detection.get("track_id") == state.get("track_id") else 0.0
             score = (
                 match_score(predicted_box, detection["bbox"])
                 + detection["confidence"] * 0.25
-                + centroid_score * 2.0
-                + appearance_score * 1.4
+                + centroid_score * 3.2
+                + appearance_score * 0.8
+                + track_id_bonus
             )
             if score > best_score:
                 best_index = index
@@ -732,7 +724,7 @@ def track_annotations(payload: dict):
                     **detection,
                     "appearance_score": appearance_score,
                     "centroid_distance": previous_centroid_distance,
-                    "allow_reacquire": appearance_score >= 0.55 or missed > 0
+                    "allow_reacquire": can_reacquire_far
                 }
                 best_score = score
 
@@ -990,7 +982,8 @@ def track_annotations(payload: dict):
                     proposed_box,
                     frame_width,
                     frame_height,
-                    allow_reacquire=detection.get("allow_reacquire", False)
+                    allow_reacquire=detection.get("allow_reacquire", False),
+                    align_to_detection=True
                 )
                 state["score"] = detection["confidence"]
                 state["missed"] = 0

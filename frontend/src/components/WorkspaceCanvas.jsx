@@ -270,6 +270,8 @@ export const Canvas = () => {
     const stageRef = useRef(null)
     const transformerRef = useRef(null)
     const lastLoadedImageRef = useRef(null)
+    const hasFittedImageRef = useRef(false)
+    const forceFitViewRef = useRef(false)
     const guideFrameRef = useRef(null)
     const canvasContainerRef = useRef(null)
 
@@ -337,14 +339,17 @@ export const Canvas = () => {
         setAnnotationTool('pan'); // Reset tool to pan on image change safely
         selectShape(null); // Clear selection on image change
         setEditingAnnotationId(null);
+        if (!selectedImage) {
+            hasFittedImageRef.current = false;
+            forceFitViewRef.current = false;
+            setImageSize({ width: 0, height: 0 });
+            setScale(1);
+            setPosition({ x: 0, y: 0 });
+        }
     }, [selectedImage, setAnnotationTool])
 
-    const handleImageLoad = useCallback((imgWidth, imgHeight) => {
-        if (lastLoadedImageRef.current === selectedImage) return;
-        lastLoadedImageRef.current = selectedImage;
-
+    const fitImageToStage = useCallback((imgWidth, imgHeight) => {
         if (imgWidth <= 0 || imgHeight <= 0) return;
-        setImageSize({ width: imgWidth, height: imgHeight });
 
         const padding = 50;
         const availableWidth = stageSize.width - padding * 2;
@@ -361,7 +366,21 @@ export const Canvas = () => {
 
         setScale(newScale);
         setPosition({ x: centerX, y: centerY });
-    }, [stageSize.width, stageSize.height, selectedImage])
+    }, [stageSize.width, stageSize.height])
+
+    const handleImageLoad = useCallback((imgWidth, imgHeight) => {
+        if (lastLoadedImageRef.current === selectedImage) return;
+        lastLoadedImageRef.current = selectedImage;
+
+        if (imgWidth <= 0 || imgHeight <= 0) return;
+        setImageSize({ width: imgWidth, height: imgHeight });
+
+        if (!hasFittedImageRef.current || forceFitViewRef.current) {
+            fitImageToStage(imgWidth, imgHeight);
+            hasFittedImageRef.current = true;
+            forceFitViewRef.current = false;
+        }
+    }, [fitImageToStage, selectedImage])
 
     const checkDeselect = (e) => {
         // Deselect if clicked on empty stage
@@ -535,6 +554,7 @@ export const Canvas = () => {
     const imageUrl = selectedImage ? `http://localhost:8000/image_file/${encodeURIComponent(selectedImage)}${projectName ? `?project_name=${encodeURIComponent(projectName)}` : ''}` : '';
     const handleResetView = () => {
         lastLoadedImageRef.current = null;
+        forceFitViewRef.current = true;
         const image = new Image();
         image.src = imageUrl;
         image.onload = () => {

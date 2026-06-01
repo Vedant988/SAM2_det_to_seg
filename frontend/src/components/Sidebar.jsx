@@ -1,8 +1,8 @@
 import React, { useRef } from 'react'
 import { useStore } from '../store'
-import { Upload, Image as ImageIcon, Plus, CheckCircle2, Trash2 } from 'lucide-react'
+import { Image as ImageIcon, Plus, CheckCircle2, Trash2, X } from 'lucide-react'
 
-export const Sidebar = () => {
+export const Sidebar = ({ onClose }) => {
     const { images, setImages, selectedImage, setSelectedImage, allAnnotations } = useStore()
     const fileInputRef = useRef(null)
 
@@ -49,7 +49,7 @@ export const Sidebar = () => {
     }
 
     return (
-        <div className="w-72 bg-slate-900/95 backdrop-blur-md border-r border-slate-800 flex flex-col shadow-2xl z-20">
+        <div className="w-80 max-w-[90vw] h-full bg-slate-900/95 backdrop-blur-md border-r border-slate-800 flex flex-col shadow-2xl z-20">
             <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-cyan-500/10 rounded-lg ring-1 ring-cyan-500/20">
@@ -62,6 +62,16 @@ export const Sidebar = () => {
                     <div className="text-xs font-mono text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded-full ring-1 ring-cyan-500/20">
                         {Object.keys(allAnnotations).length} annotated
                     </div>
+                    {onClose && (
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="ml-1 rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-800 hover:text-white"
+                            title="Close gallery"
+                        >
+                            <X size={16} />
+                        </button>
+                    )}
                 </div>
             </div>
 

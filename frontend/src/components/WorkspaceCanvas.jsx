@@ -7,16 +7,18 @@ import { v4 as uuidv4 } from 'uuid'
 
 const URLImage = ({ src, onImageLoad }) => {
     const [image] = useImage(src)
+    const [renderedImage, setRenderedImage] = useState(null)
 
     useEffect(() => {
         if (image) {
+            setRenderedImage(image)
             onImageLoad(image.width, image.height)
         }
     }, [image, onImageLoad])
 
     // listening={false} ensures the image doesn't intercept mouse events,
     // allowing events to bubble up to the Stage for panning/drawing.
-    return <KonvaImage image={image} listening={false} />
+    return renderedImage ? <KonvaImage image={renderedImage} listening={false} /> : null
 }
 
 const Rectangle = ({ shapeProps, isSelected, onSelect, onChange, stageScale }) => {
@@ -93,7 +95,7 @@ const Rectangle = ({ shapeProps, isSelected, onSelect, onChange, stageScale }) =
 export const Canvas = () => {
     const { selectedImage, annotations, setAnnotations, updateAnnotation, removeAnnotation } = useStore()
     const [selectedId, selectShape] = useState(null)
-    const [stageSize, setStageSize] = useState({ width: window.innerWidth - 288, height: window.innerHeight })
+    const [stageSize, setStageSize] = useState({ width: window.innerWidth, height: window.innerHeight })
     const [scale, setScale] = useState(1)
     const [position, setPosition] = useState({ x: 0, y: 0 })
 
@@ -112,7 +114,7 @@ export const Canvas = () => {
 
     useEffect(() => {
         const handleResize = () => {
-            setStageSize({ width: window.innerWidth - 288, height: window.innerHeight })
+            setStageSize({ width: window.innerWidth, height: window.innerHeight })
         }
         window.addEventListener('resize', handleResize)
         return () => window.removeEventListener('resize', handleResize)

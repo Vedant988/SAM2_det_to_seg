@@ -1,12 +1,12 @@
 import React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Clock, FolderOpen, ArrowRight, Github } from 'lucide-react'
+import { Plus, Clock, FolderOpen, ArrowRight, Github, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card"
 import { Button } from "../components/ui/button"
 import { useStore } from '../store'
 
 export const Dashboard = () => {
-    const { recentProjects, setProjectName } = useStore()
+    const { recentProjects, setProjectName, deleteRecentProject } = useStore()
     const navigate = useNavigate()
 
     const handleOpenProject = async (project) => {
@@ -25,6 +25,13 @@ export const Dashboard = () => {
         }
 
         navigate('/workspace')
+    }
+
+    const handleDeleteRecentProject = (event, project) => {
+        event.stopPropagation()
+
+        if (!confirm(`Remove "${project.name}" from recent work?`)) return
+        deleteRecentProject(project.id)
     }
 
     return (
@@ -89,13 +96,23 @@ export const Dashboard = () => {
                                         onClick={() => handleOpenProject(project)}
                                         className="flex items-center justify-between group cursor-pointer hover:bg-slate-800/50 p-2 rounded-lg transition-colors"
                                     >
-                                        <div className="flex flex-col">
-                                            <span className="font-medium group-hover:text-cyan-400 transition-colors">{project.name}</span>
+                                        <div className="min-w-0 flex flex-col">
+                                            <span className="truncate font-medium group-hover:text-cyan-400 transition-colors" title={project.name}>{project.name}</span>
                                             <span className="text-xs text-slate-500">
-                                                {new Date(project.lastEdited).toLocaleDateString()} • {project.model}
+                                                {new Date(project.lastEdited).toLocaleDateString()} - {project.model}
                                             </span>
                                         </div>
-                                        <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all text-cyan-400" />
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={(event) => handleDeleteRecentProject(event, project)}
+                                                className="rounded-md p-1.5 text-slate-500 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
+                                                title="Delete recent work"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                            <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all text-cyan-400" />
+                                        </div>
                                     </div>
                                 ))
                             )}

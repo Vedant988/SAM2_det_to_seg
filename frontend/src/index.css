@@ -22,3 +22,28 @@ body {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     @apply bg-slate-600;
 }
+
+.timeline-range {
+    background:
+        repeating-linear-gradient(to right, rgba(148, 163, 184, 0.45) 0 1px, transparent 1px 12px),
+        linear-gradient(to right, rgb(8 145 178) 0 var(--timeline-progress), rgb(15 23 42) var(--timeline-progress) 100%);
+}
+
+.timeline-range::-webkit-slider-thumb {
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 9999px;
+    border: 3px solid rgb(103 232 249);
+    background: rgb(15 23 42);
+    box-shadow: 0 0 0 4px rgba(8, 145, 178, 0.25);
+}
+
+.timeline-range::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 9999px;
+    border: 3px solid rgb(103 232 249);
+    background: rgb(15 23 42);
+    box-shadow: 0 0 0 4px rgba(8, 145, 178, 0.25);
+}

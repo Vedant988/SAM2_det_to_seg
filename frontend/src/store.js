@@ -16,6 +16,9 @@ export const useStore = create(
                 ].slice(0, 5) // Keep last 5
                 return { recentProjects: newProjects }
             }),
+            deleteRecentProject: (projectId) => set((state) => ({
+                recentProjects: state.recentProjects.filter(project => project.id !== projectId)
+            })),
 
             // Image & Annotation State
             images: [],
